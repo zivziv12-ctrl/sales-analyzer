@@ -45,7 +45,7 @@ uploaded_file = st.file_uploader("העלה הקלטת שיחה (MP3, WAV, M4A)",
 
 def transcribe_audio(file_buffer):
     """Sends audio to Deepgram for transcription with diarization (Speaker separation)"""
-    url = "https://api.deepgram.com/v1/listen?model=nova-2&smart_format=true&diarize=true&language=he"
+    url = "https://api.deepgram.com/v1/listen?model=whisper-large&language=he&diarize=true&smart_format=true"
     headers = {
         "Authorization": f"Token {DEEPGRAM_API_KEY}",
         "Content-Type": "audio/*"
