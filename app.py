@@ -3,28 +3,45 @@ import requests
 import google.generativeai as genai
 import os
 
-# --- Page Config ---
+# --- 1. Page Config & CSS ---
 st.set_page_config(page_title="ניתוח שיחת מכירה - גשר הבהירות", layout="wide", page_icon="🧠")
 
-# --- Custom CSS for RTL (Right-to-Left) Support ---
+# CSS מתקדם לסידור הטבלאות והפונטים בעברית
 st.markdown("""
 <style>
+    /* כיוון כללי לימין */
     .stApp { direction: rtl; text-align: right; }
-    h1, h2, h3, h4, h5, h6, p, div, span, label, .stMarkdown { text-align: right !important; }
-    .stTextInput > div > div > input { text-align: right; direction: rtl; }
+    
+    /* סידור טבלאות בעברית */
+    .stMarkdown table {
+        direction: rtl !important;
+        text-align: right !important;
+        width: 100% !important;
+        border-collapse: collapse;
+    }
+    .stMarkdown th {
+        background-color: #f0f2f6;
+        text-align: right !important;
+        padding: 10px;
+    }
+    .stMarkdown td {
+        text-align: right !important;
+        padding: 10px;
+        border-bottom: 1px solid #ddd;
+    }
+    
+    /* כותרות וטקסטים */
+    h1, h2, h3, h4, p, div, span, label { text-align: right !important; }
     .stAlert { direction: rtl; text-align: right; }
-    /* Fix for lists */
-    ul { direction: rtl; text-align: right; }
-    li { text-align: right; }
 </style>
 """, unsafe_allow_html=True)
 
-# --- Header ---
+# --- 2. Header ---
 st.title("מנתח השיחות האוטומטי 🧠")
-st.markdown("##### מבוסס מודל 'גשר הבהירות' (The Clarity Bridge)")
-st.markdown("---")
+st.caption("מבוסס מודל 'גשר הבהירות' (The Clarity Bridge)")
+st.divider()
 
-# --- API Keys Handling ---
+# --- 3. API Keys Handling ---
 try:
     DEEPGRAM_API_KEY = st.secrets["DEEPGRAM_API_KEY"]
     GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
@@ -32,19 +49,11 @@ except:
     st.error("⚠️ חסרים מפתחות API. יש להגדיר אותם ב-Streamlit Secrets בענן.")
     st.stop()
 
-# --- User Inputs ---
-col1, col2 = st.columns([2, 1])
-with col1:
-    target_audience = st.text_input("הגדר את הלקוח בשיחה (חובה)", placeholder="לדוגמה: זוג צעיר לפני דירה ראשונה שחושש מבירוקרטיה")
-with col2:
-    st.info("💡 המערכת תנתח את השיחה ותחפש פערים לוגיים, בעיות אמון ותרחישי אימים.")
-
-uploaded_file = st.file_uploader("העלה הקלטת שיחה (MP3, WAV, M4A)", type=['mp3', 'wav', 'm4a'])
-
-# --- Functions ---
+# --- 4. Functions ---
 
 def transcribe_audio(file_buffer):
-    """Sends audio to Deepgram for transcription with diarization (Speaker separation)"""
+    """Deepgram Transcription"""
+    # שימוש במודל Whisper שהוא יציב יותר בעברית בתוך Deepgram
     url = "https://api.deepgram.com/v1/listen?model=whisper-large&language=he&diarize=true&smart_format=true"
     headers = {
         "Authorization": f"Token {DEEPGRAM_API_KEY}",
@@ -53,13 +62,11 @@ def transcribe_audio(file_buffer):
     response = requests.post(url, headers=headers, data=file_buffer)
     
     if response.status_code != 200:
-        st.error(f"שגיאה בתמלול (Deepgram): {response.text}")
         return None
-        
     return response.json()
 
 def format_transcript(data):
-    """Formats the JSON response into a readable dialogue"""
+    """Formatting Transcript"""
     try:
         transcript = ""
         words = data['results']['channels'][0]['alternatives'][0]['words']
@@ -72,58 +79,70 @@ def format_transcript(data):
                 current_speaker = speaker
             
             if speaker != current_speaker:
-                transcript += f"Speaker {current_speaker}: {current_sentence.strip()}\n"
+                # המרת מספרי דוברים לתוויות ברורות יותר (אם אפשר, אחרת משאיר מספר)
+                speaker_label = "דובר א'" if current_speaker == 0 else "דובר ב'"
+                transcript += f"\n{speaker_label}: {current_sentence.strip()}\n"
                 current_sentence = ""
                 current_speaker = speaker
                 
             current_sentence += f"{word['word']} "
         
-        # Add last sentence
-        transcript += f"Speaker {current_speaker}: {current_sentence.strip()}\n"
+        # Last sentence
+        speaker_label = "דובר א'" if current_speaker == 0 else "דובר ב'"
+        transcript += f"\n{speaker_label}: {current_sentence.strip()}\n"
         return transcript
-    except Exception as e:
-        return "שגיאה בפרמט התמלול. ייתכן שהקובץ ריק או לא תקין."
+    except:
+        return "שגיאה בפרמוט התמלול."
 
 def analyze_with_gemini(transcript_text, audience_desc):
-    """Sends the transcript to Gemini with the Clarity Bridge Prompt"""
+    """Gemini Analysis - STRICT & OPTIMIZED"""
     genai.configure(api_key=GEMINI_API_KEY)
-    model = genai.GenerativeModel('gemini-2.5-flash')
+    
+    # שימוש בטמפרטורה נמוכה לדיוק מקסימלי
+    generation_config = genai.types.GenerationConfig(
+        temperature=0.2
+    )
+    
+    # שימוש במודל החזק והעדכני ביותר
+    model = genai.GenerativeModel('gemini-2.0-flash-exp', generation_config=generation_config)
     
     prompt = f"""
-    תפקיד: אתה מומחה למודל המכירות והפסיכולוגיה הצרכנית "גשר הבהירות" (The Clarity Bridge).
-    משימה: נתח את תמלול השיחה המצורף.
-
-    הקשר לשיחה:
-    קהל היעד והלקוח בשיחה מוגדרים כך: "{audience_desc}"
+    תפקיד: אתה יועץ עסקי בכיר המומחה במודל המכירות "גשר הבהירות".
+    מטרה: בצע ניתוח כירורגי לשיחת המכירה המצורפת.
     
-    הנחיות קריטיות (Strict Rules):
-    1. **אל תמציא**: אם אין מידע בשיחה על סעיף מסוים, כתוב במפורש: "❌ לא זוהה בשיחה זו". אל תנסה להסיק מסקנות עקיפות.
-    2. **זהה דוברים**: בתמלול כתוב Speaker 0 ו-Speaker 1. עליך להבין מההקשר מי המוכר ומי הלקוח ולהשתמש במונחים אלו.
-    3. **ציטוטים**: כל תובנה חייבת להיות מגובה בציטוט במירכאות מתוך הטקסט.
+    הקשר: הלקוח בשיחה מוגדר כך: "{audience_desc}"
     
-    אנא הפק דו"ח בעברית בפורמט Markdown הכולל את החלקים הבאים:
+    --- חוקים קריטיים (אל תפר אותם!) ---
+    1. **אל תחזור על התמלול!** הפלט שלך צריך להכיל רק את הניתוח.
+    2. **אל תמציא**: בסס הכל על ציטוטים מהטקסט.
+    3. **עיצוב**: השתמש בטבלאות Markdown מסודרות.
+    ------------------------------------
 
-    ### 1. תרגום הסימפטום (The Translation Gap)
-    האם המוכר הצליח לתרגם את תלונות הלקוח ("יקר לי", "כואב לי") לבעיה השורשית?
-    * צור טבלה עם העמודות: הסימפטום שהוזכר | האם בוצע תרגום לבעיה שורשית? | ציטוט מהשיחה.
+    מבנה הדו"ח הנדרש:
 
-    ### 2. משולש האמון (The Trust Triad)
-    נתח את רמת האמון ב-3 הגזרות. אם חסר מידע, ציין זאת.
-    * **אמון במוצר/שיטה**: (האם הלקוח מאמין שזה יעבוד?)
-    * **אמון במוכר**: (האם המוכר נתפס מקצועי/ישר?)
-    * **אמון עצמי (מסוגלות)**: (האם הלקוח מאמין שהוא יצליח ליישם? זהו לרוב החסם הסמוי).
-    *(עבור כל אחד: כתוב סטטוס וציטוט תומך)*.
+    ## 1. 🗣️ תרגום הסימפטום (The Translation Gap)
+    האם המוכר הצליח לקחת תלונה ("יקר לי") ולתרגם אותה לבעיית שורש?
+    | הסימפטום שהלקוח הציג | האם תורגם לבעיית שורש? | ציטוט מהשיחה |
+    |---|---|---|
+    | ... | ... | ... |
 
-    ### 3. תרחיש האימים (The Nightmare Scenario)
-    האם הלקוח ביטא פחד עמוק מכישלון או השלכות שליליות? כיצד המוכר הגיב לזה?
+    ## 2. 🔺 משולש האמון (The Trust Triad)
+    מה סטטוס האמון ב-3 הגזרות?
+    | סוג האמון | סטטוס (✅ קיים / ⚠️ רופף / ❌ חסר) | הסבר וציטוט |
+    |---|---|---|
+    | **במוצר/בשיטה** | ... | ... |
+    | **במוכר/בסמכות** | ... | ... |
+    | **בעצמו (מסוגלות הלקוח)** | ... | ... |
 
-    ### 4. הזדמנויות שהוחמצו (The Missing Links)
-    רשום 2-3 שאלות קריטיות שהמוכר *לא שאל* והיו יכולות לחשוף מידע חסר על הלקוח לפי המודל.
+    ## 3. 😱 תרחיש האימים
+    * **הפחד העמוק שזוהה:** (במשפט אחד)
+    * **האם טופל בשיחה?** (כן/לא + הסבר)
 
-    ### סיכום: החסם הקריטי
-    מהי הסיבה האחת והיחידה (בסבירות גבוהה) שבגללה העסקה לא נסגרה או נתקעה?
+    ## 4. 🏁 סיכום מנהלים: החסם הקריטי
+    מהי הסיבה האחת והיחידה שבגללה העסקה הזו תיתקע או תיפול?
 
-    הנה התמלול:
+    ---
+    השיחה לניתוח:
     {transcript_text}
     """
     
@@ -131,36 +150,51 @@ def analyze_with_gemini(transcript_text, audience_desc):
         response = model.generate_content(prompt)
         return response.text
     except Exception as e:
-        return f"שגיאה בניתוח ה-AI: {str(e)}"
+        return f"שגיאה בניתוח: {str(e)}"
 
-# --- Main App Logic ---
+# --- 5. Main UI Logic ---
 
-if uploaded_file and target_audience:
-    if st.button("התחל ניתוח (כ-60 שניות) 🚀", type="primary"):
+col1, col2 = st.columns([2, 1])
+with col1:
+    target_audience = st.text_input("מי הלקוח בשיחה? (חובה)", placeholder="לדוגמה: זוג צעיר שחושש מבירוקרטיה...")
+with col2:
+    uploaded_file = st.file_uploader("העלה הקלטה", type=['mp3', 'wav', 'm4a'])
+
+if st.button("התחל ניתוח 🚀", type="primary", disabled=not (uploaded_file and target_audience)):
+    
+    # Progress Bar
+    progress_bar = st.progress(0, text="מתחיל בתהליך...")
+    
+    try:
+        # שלב 1: תמלול
+        progress_bar.progress(25, text="🎧 מתמלל את השיחה ומפריד דוברים (Deepgram)...")
+        raw_data = transcribe_audio(uploaded_file.getvalue())
         
-        # 1. Transcribe
-        with st.status("מתקשר עם השרתים...", expanded=True) as status:
-            st.write("📤 שולח את האודיו לתמלול (Deepgram)...")
-            raw_data = transcribe_audio(uploaded_file.getvalue())
+        if raw_data:
+            transcript = format_transcript(raw_data)
             
-            if raw_data:
-                st.write("📝 מעבד טקסט ומפריד דוברים...")
-                transcript = format_transcript(raw_data)
-                
-                # 2. Analyze
-                st.write("🧠 המנתח האוטומטי סורק את השיחה (Gemini AI)...")
-                analysis = analyze_with_gemini(transcript, target_audience)
-                
-                status.update(label="הניתוח הסתיים!", state="complete", expanded=False)
-                
-                st.divider()
-                st.subheader("תוצאות הניתוח:")
+            # שלב 2: ניתוח
+            progress_bar.progress(75, text="🧠 המנתח האוטומטי סורק את השיחה (Gemini 2.0)...")
+            analysis = analyze_with_gemini(transcript, target_audience)
+            
+            progress_bar.progress(100, text="סיימנו!")
+            
+            # הצגת תוצאות
+            st.success("הניתוח מוכן!")
+            
+            # לשוניות לניווט נוח
+            tab1, tab2 = st.tabs(["📊 הניתוח המלא", "📝 התמלול הגולמי"])
+            
+            with tab1:
                 st.markdown(analysis)
+                # כפתור הורדת הניתוח
+                st.download_button("📥 הורד את הניתוח כקובץ", analysis, file_name="analysis_report.txt")
                 
-                with st.expander("👀 צפה בתמלול השיחה המלא"):
-                    st.text(transcript)
-    else:
-        st.write("") 
-
-elif uploaded_file and not target_audience:
-    st.warning("⚠️ רגע, שכחת לכתוב את מי אנחנו מנתחים (בתיבה למעלה).")
+            with tab2:
+                st.text_area("תמלול השיחה", transcript, height=400)
+                
+        else:
+            st.error("שגיאה בתהליך התמלול.")
+            
+    except Exception as e:
+        st.error(f"התרחשה שגיאה בלתי צפויה: {e}")
