@@ -104,7 +104,7 @@ def analyze_with_gemini(transcript_text, audience_desc):
     )
     
     # שימוש במודל החזק והעדכני ביותר
-    model = genai.GenerativeModel('gemini-2.0-flash-exp', generation_config=generation_config)
+    model = genai.GenerativeModel('gemini-2.5-flash')
     
     prompt = f"""
     תפקיד: אתה יועץ עסקי בכיר המומחה במודל המכירות "גשר הבהירות".
