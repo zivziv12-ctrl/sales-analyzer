@@ -75,25 +75,12 @@ def analyze_with_gemini(transcript_text, audience_desc):
     """Gemini Analysis - With Safety Settings Disabled"""
     genai.configure(api_key=GEMINI_API_KEY)
     
-    # --- הגדרות בטיחות (התוספת החשובה) ---
-    # אנו מבטלים את החסימות כדי למנוע מצב שהמודל חוסם את עצמו בגלל מילים כמו "לחץ", "כסף" וכו'
+    # ביטול חסימות בטיחות (Safety Settings)
     safety_settings = [
-        {
-            "category": "HARM_CATEGORY_HARASSMENT",
-            "threshold": "BLOCK_NONE"
-        },
-        {
-            "category": "HARM_CATEGORY_HATE_SPEECH",
-            "threshold": "BLOCK_NONE"
-        },
-        {
-            "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-            "threshold": "BLOCK_NONE"
-        },
-        {
-            "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
-            "threshold": "BLOCK_NONE"
-        },
+        {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+        {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+        {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+        {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
     ]
 
     generation_config = genai.types.GenerationConfig(
@@ -102,7 +89,7 @@ def analyze_with_gemini(transcript_text, audience_desc):
     
     model = genai.GenerativeModel('gemini-2.5-flash', 
                                   generation_config=generation_config,
-                                  safety_settings=safety_settings) # שימוש בהגדרות הבטיחות
+                                  safety_settings=safety_settings)
     
     prompt = f"""
     תפקיד: אתה יועץ עסקי בכיר המתמחה בפסיכולוגית מכירות ושיווק, ובנוסף עורך לשוני מומחה בעברית.
@@ -122,4 +109,82 @@ def analyze_with_gemini(transcript_text, audience_desc):
     --- מבנה הדו"ח הנדרש (השתמש בטבלאות Markdown) ---
 
     ### 📍 שלב הלקוח במסע
-    זהה באיזה שלב (1-5) נמצא הלקוח *במהלך השיחה הז
+    זהה באיזה שלב (1-5) נמצא הלקוח *במהלך השיחה הזו* ונמק בקצרה מדוע.
+
+    ### חלק א': תרגום הסימפטום (The Translation Gap)
+    זהה תלונות שהלקוח העלה. האם המוכר תרגם אותן לבעיית שורש?
+    * אם המוכר הצליח: תן פידבק חיובי.
+    * אם המוכר נכשל: תן פידבק לשיפור + הצעה פרקטית לפעם הבאה (מה היה עליו לומר/לשאול).
+
+    | הסימפטום שהוזכר | הבעיה השורשית (כפי שהוצגה או משתמעת) | פידבק למוכר והצעה ליישום |
+    |---|---|---|
+    | ... | ... | ... |
+
+    ### חלק ב': משולש האמון (The Trust Triad)
+    | סוג האמון | סטטוס (✅/⚠️/❌) | הסבר מנומק |
+    |---|---|---|
+    | **במוצר/בשיטה** | ... | ... |
+    | **במוכר/בסמכות** | ... | ... |
+    | **בעצמו (מסוגלות הלקוח)** | ... | ... |
+
+    ### חלק ג': פחדים וחששות
+    * **הפחד/החשש המרכזי של הלקוח:** (במשפט אחד)
+    * **האם נוטרל בשיחה?** (כן/לא + הסבר קצר)
+
+    ### חלק ד': החסם הקריטי
+    מהי הסיבה האחת (האתגר המרכזי) שבגללה העסקה הזו תיתקע או תיפול?
+
+    ### 📝 סיכום ביצועי המוכר
+    * **נקודה לשימור (לטובה):** (ציין דבר אחד שהמוכר עשה מצוין).
+    * **נקודה לשיפור:** (ציין דבר אחד שדורש שיפור דחוף).
+
+    ---
+    התמלול הגולמי לניתוח:
+    {transcript_text}
+    """
+    
+    try:
+        response = model.generate_content(prompt)
+        return response.text
+    except Exception as e:
+        return f"שגיאה בניתוח ה-AI (נסה שוב או שהקובץ חסום): {str(e)}"
+
+# --- 5. Main UI Logic ---
+
+col1, col2 = st.columns([2, 1])
+with col1:
+    target_audience = st.text_input("מי הלקוח? (חובה)", placeholder="לדוגמה: בעל עסק שחושש משיווק...")
+with col2:
+    uploaded_file = st.file_uploader("העלה הקלטה", type=['mp3', 'wav', 'm4a'])
+
+if st.button("התחל ניתוח 🚀", type="primary", disabled=not (uploaded_file and target_audience)):
+    
+    progress_bar = st.progress(0, text="מתחיל בתהליך...")
+    
+    try:
+        # שלב 1
+        progress_bar.progress(25, text="🎧 מתמלל ומנקה רעשים (Deepgram Whisper)...")
+        raw_data = transcribe_audio(uploaded_file.getvalue())
+        
+        if raw_data:
+            transcript = format_transcript(raw_data)
+            
+            # שלב 2
+            progress_bar.progress(75, text="🧠 המנתח בודק את שלבי המודל (Gemini)...")
+            analysis = analyze_with_gemini(transcript, target_audience)
+            
+            progress_bar.progress(100, text="סיימנו!")
+            st.success("הניתוח מוכן!")
+            
+            tab1, tab2 = st.tabs(["📊 הניתוח המלא", "📝 התמלול הגולמי"])
+            with tab1:
+                st.markdown(analysis)
+                st.download_button("📥 הורד ניתוח", analysis, file_name="analysis.txt")
+            with tab2:
+                st.info("זהו התמלול הגולמי לפני התיקון של ה-AI:")
+                st.text_area("", transcript, height=300)
+        else:
+            st.error("שגיאה בתמלול.")
+            
+    except Exception as e:
+        st.error(f"שגיאה: {e}")
