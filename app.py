@@ -87,7 +87,7 @@ def format_transcript(data):
 def analyze_with_gemini(transcript_text, audience_desc):
     """Sends the transcript to Gemini with the Clarity Bridge Prompt"""
     genai.configure(api_key=GEMINI_API_KEY)
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    model = genai.GenerativeModel('gemini-2.5-flash')
     
     prompt = f"""
     תפקיד: אתה מומחה למודל המכירות והפסיכולוגיה הצרכנית "גשר הבהירות" (The Clarity Bridge).
