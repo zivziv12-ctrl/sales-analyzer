@@ -33,6 +33,7 @@ except:
 
 def transcribe_audio(file_buffer):
     """Deepgram Transcription"""
+    # שימוש במודל Whisper שהוא יציב יותר בעברית בתוך Deepgram
     url = "https://api.deepgram.com/v1/listen?model=whisper-large&language=he&diarize=true&smart_format=true&punctuate=true&filler_words=false"
     headers = {
         "Authorization": f"Token {DEEPGRAM_API_KEY}",
@@ -87,6 +88,7 @@ def analyze_with_gemini(transcript_text, audience_desc):
         temperature=0.15 
     )
     
+    # שימוש במודל 2.5 היציב
     model = genai.GenerativeModel('gemini-2.5-flash', 
                                   generation_config=generation_config,
                                   safety_settings=safety_settings)
